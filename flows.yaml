@@ -1,0 +1,8 @@
+repair:
+  agents: [Architect, Developer, Security, Reviewer]
+  minimumScore: 70
+  developerRetries: 2
+security-only-review:
+  agents: [Security, Reviewer]
+  minimumScore: 70
+  developerRetries: 0
