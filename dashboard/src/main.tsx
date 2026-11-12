@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Activity, ArrowUpLeft, Bot, Cable, CircleGauge, Command, GitPullRequest, LockKeyhole, MessageSquare, Plus, Radio, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
+import { Activity, ArrowUpLeft, Bot, Cable, CircleGauge, Command, GitPullRequest, LockKeyhole, MessageSquare, Plus, Radio, RefreshCw, ShieldCheck, Sparkles, Boxes, ChevronLeft, Cloud, Code2, Database, Eye, ListFilter, Search, Terminal, X } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
@@ -21,9 +21,29 @@ type Improvement = { id: string; proposal: string; status: string };
 type Connections = { githubConfigured: boolean; installationUrl: string | null; cloudflareTokenVerified: boolean; inferenceEnabled: boolean };
 type Replay = { task: Task; steps: Step[]; policy: Policy[] };
 
+const examples: Task[] = [
+  { id: "sample-1", title: "إصلاح التحقق من توقيع Webhook", repository: "example/edge-api", issue: 42, status: "awaiting-validation" },
+  { id: "sample-2", title: "تحديث معالجة أخطاء الاتصال بقاعدة البيانات", repository: "example/data-worker", issue: 38, status: "running" },
+  { id: "sample-3", title: "مراجعة إعدادات النشر وحماية الفرع", repository: "example/edge-api", issue: 35, status: "draft-opened" },
+  { id: "sample-4", title: "فحص تبعيات لوحة التحكم", repository: "example/dashboard", issue: 31, status: "queued" },
+];
+
+const team = [
+  [Boxes, "Architect", "تخطيط التغيير"],
+  [Code2, "Developer", "اقتراح الكود"],
+  [ShieldCheck, "Security", "فحص المخاطر"],
+  [Eye, "Reviewer", "مراجعة النتائج"],
+  [Sparkles, "Meta-Improver", "تحسين سير العمل"],
+] as const;
+const activeStates = ["running", "queued"];
+
 function App() {
   const [token, setToken] = useState("");
   const [draft, setDraft] = useState("");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authPending, setAuthPending] = useState(false);
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskState, setTaskState] = useState("");
   const [route, setRoute] = useState(location.pathname);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -94,6 +114,7 @@ function App() {
       }
       if (event.key === "Escape") {
         setPalette(false);
+        setAuthOpen(false);
         setReplay(undefined);
         setShowToken(false);
       }
@@ -106,13 +127,21 @@ function App() {
 
   async function unlock(event: FormEvent) {
     event.preventDefault();
+    if (authPending || !draft.trim()) return;
     setError("");
+    setAuthPending(true);
     try {
       const config = await api<Connections>("connections", undefined, draft.trim());
       setConnections(config);
       setToken(draft.trim());
       setDraft("");
-    } catch (failure) { showError(failure); }
+      setAuthOpen(false);
+    } catch (failure) {
+      if (failure instanceof TypeError || failure instanceof SyntaxError) setError("تعذّر الوصول إلى Worker. تحقق من نشره وإعداد عنوان الواجهة.");
+      else showError(failure);
+    } finally {
+      setAuthPending(false);
+    }
   }
 
   async function openThread(item: Thread) {
@@ -157,25 +186,54 @@ function App() {
 
   const page = pages.find(item => item[0] === route);
   const currentTask = tasks.find(item => item.id === task);
+  const visibleTasks = token ? tasks : examples;
+  const filteredTasks = visibleTasks.filter(item => {
+    const searchable = [item.title, item.repository, String(item.issue)].join(" ").toLowerCase();
+    return (!taskState || taskState === item.status) && searchable.includes(taskSearch.trim().toLowerCase());
+  });
+  const metrics = [
+    [GitPullRequest, "إجمالي المهام", visibleTasks.length, "violet"],
+    [Radio, "قيد المعالجة", visibleTasks.filter(item => activeStates.includes(item.status)).length, "blue"],
+    [ShieldCheck, "بانتظار التحقق", visibleTasks.filter(item => item.status === "awaiting-validation").length, "amber"],
+    [GitPullRequest, "مسودات PR", visibleTasks.filter(item => item.status === "draft-opened").length, "green"],
+  ] as const;
+
+  function openAuth() {
+    setError("");
+    setAuthOpen(true);
+  }
+
+  function openReplay(item: Task) {
+    if (token) {
+      void api<Replay>("replay/" + item.id).then(setReplay).catch(showError);
+      return;
+    }
+    setReplay({ task: item, policy: [], steps: [{ name: "معاينة سجل المهمة", input: item.repository + " #" + item.issue, output: status[item.status] }] });
+  }
+
   return <div className="shell">
     <aside className="nav">
-      <div className="brand"><span className="logo"><Bot size={23}/></span><div><strong>AI Engineering</strong><small>Autonomous Team</small></div></div>
-      <nav>{pages.map(([path, label, Icon]) => <button key={path} className={route === path ? "nav-item active" : "nav-item"} onClick={() => navigate(path)}><Icon size={18}/>{label}</button>)}</nav>
-      <div className="nav-bottom"><span className="signal"/><span>Cloudflare Edge</span></div>
+      <button className="brand" onClick={() => navigate("/")} aria-label="CF-Agents، نظرة عامة"><span className="logo"><Boxes size={23}/></span><span><strong dir="ltr">CF-Agents</strong><small>منصة الفريق الهندسي</small></span></button>
+      <nav aria-label="التنقل الرئيسي">{pages.map(([path, label, Icon]) => <button key={path} className={route === path ? "nav-item active" : "nav-item"} aria-current={route === path ? "page" : undefined} onClick={() => navigate(path)}><Icon size={18}/><span>{label}</span>{route === path && <ChevronLeft size={15} className="nav-arrow"/>}</button>)}</nav>
+      <div className="nav-bottom"><Cloud size={18}/><span>Cloudflare Pages</span></div>
     </aside>
     <main>
-      <header><span>{page?.[1] ?? "مساحة العمل"}</span><div className="top-actions">
-        <span className="chip"><span className={connections?.githubConfigured ? "signal" : "signal muted"}/>GitHub</span>
-        <span className="chip"><span className={connections?.cloudflareTokenVerified ? "signal" : "signal muted"}/>Cloudflare</span>
-        <button className="icon" aria-label="لوحة الأوامر" onClick={() => setPalette(true)}><Command size={16}/> K</button>
+      <header className="topbar"><div className="breadcrumb"><span>مساحة العمل</span><ChevronLeft size={14}/><strong>{page?.[1] ?? "نظرة عامة"}</strong></div><div className="top-actions">
+        {token && <div className="integration-status">
+          <span title={connections?.githubConfigured ? "GitHub متصل" : "GitHub غير مهيأ"}><i className={connections?.githubConfigured ? "connected" : ""}/>GitHub</span>
+          <span title={connections?.cloudflareTokenVerified ? "Cloudflare متصل" : "Cloudflare غير مهيأ"}><i className={connections?.cloudflareTokenVerified ? "connected" : ""}/>Cloudflare</span>
+        </div>}
+        <button className="command-button" aria-label="لوحة الأوامر" onClick={() => setPalette(true)}><Search size={16}/><span>بحث سريع</span><kbd dir="ltr"><Command size={12}/> K</kbd></button>
+        {!token && <button className="top-login" onClick={openAuth}><LockKeyhole size={15}/> دخول الإدارة</button>}
+        {token && <button className="top-login" onClick={() => navigate("/connections")}><Cable size={15}/> الاتصالات</button>}
       </div></header>
       <div className="content">
-        {error && <div className="alert" role="alert">{error}</div>}
+        {error && !authOpen && !showToken && <div className="alert" role="alert">{error}</div>}
         {notice && <div className="notice" role="status">{notice}</div>}
-        {!token ? <section className="auth panel">
-          <span className="logo"><LockKeyhole size={23}/></span><h1>ادخل إلى مساحة العمل</h1>
-          <p>أدخل رمز الإدارة للاتصال بالـ Worker وتهيئة حسابات الفريق.</p>
-          <form onSubmit={unlock}><label htmlFor="admin-token">رمز الإدارة</label><input id="admin-token" type="password" autoComplete="off" value={draft} onChange={event => setDraft(event.target.value)} required/><button className="primary">اتصال <ArrowUpLeft size={16}/></button></form>
+        {!token && route !== "/" ? <section className="panel gated">
+          <span className="logo"><LockKeyhole size={23}/></span><h1>{page?.[1] ?? "مساحة العمل"}</h1>
+          <p>سجّل الدخول لعرض بيانات المشروع واستخدام هذه الصفحة.</p>
+          <button className="primary" onClick={openAuth}>دخول الإدارة <ArrowUpLeft size={16}/></button>
         </section> : route === "/chat" ? <>
           <h1>الدردشة مع الفريق</h1>
           <div className="workbench">
@@ -208,20 +266,62 @@ function App() {
           <h1>التطوير الذاتي</h1><section className="panel records"><h2>مقترحات Meta-Improver</h2>{improvements.length === 0 && <p className="empty">لا توجد مقترحات مسجلة.</p>}
             {improvements.map(item => <article className="message" key={item.id}><small>{item.status}</small><p>{item.proposal}</p></article>)}</section>
         </> : <>
-          <div className="title-row"><div><h1>غرفة العمليات</h1><p>تابع مهام GitHub وقرارات الفريق الهندسي.</p></div><button onClick={() => void refresh().catch(showError)}><RefreshCw size={17}/> تحديث</button></div>
-          <div className="cards metrics">
-            <section className="panel card"><GitPullRequest/><span>المهام المعروضة</span><strong>{tasks.length}</strong></section>
-            <section className="panel card"><Radio/><span>قيد المعالجة</span><strong>{tasks.filter(item => ["queued", "running"].includes(item.status)).length}</strong></section>
-            <section className="panel card"><ShieldCheck/><span>بانتظار التحقق</span><strong>{tasks.filter(item => item.status === "awaiting-validation").length}</strong></section>
+          <section className="hero">
+            <div className="hero-copy">
+              <span className="mode"><span className="signal"/>{token ? "مساحة العمل" : "معاينة · بيانات تجريبية"}</span>
+              <h1>غرفة العمليات</h1>
+              <p>تابع مهام GitHub من استقبال المشكلة إلى مراجعة الإصلاح وفتح مسودة Pull Request.</p>
+              <div className="hero-actions">
+                <button className="primary" onClick={token ? () => navigate("/chat") : openAuth}>{token ? <MessageSquare size={17}/> : <LockKeyhole size={17}/>} {token ? "دردشة الفريق" : "دخول الإدارة"}</button>
+                <button className="hero-secondary" onClick={token ? () => void refresh().catch(showError) : () => document.getElementById("task-list")?.scrollIntoView({ behavior: "smooth" })}>{token ? <RefreshCw size={16}/> : <ListFilter size={16}/>} {token ? "تحديث البيانات" : "استعراض المهام"}</button>
+              </div>
+            </div>
+            <div className="hero-visual" aria-hidden="true">
+              <div className="orbital ring-one"/><div className="orbital ring-two"/><div className="orbital ring-three"/>
+              <div className="hero-core"><Boxes size={49} strokeWidth={1.35}/></div>
+              <span className="orbit-node node-git"><GitPullRequest size={23}/></span>
+              <span className="orbit-node node-cloud"><Cloud size={23}/></span>
+              <span className="orbit-node node-db"><Database size={21}/></span>
+              <span className="orbit-node node-code"><Terminal size={21}/></span>
+            </div>
+          </section>
+          <div className="metrics">
+            {metrics.map(([Icon, label, count, color]) => <section className={"panel metric " + color} key={label}>
+              <span className="metric-icon"><Icon size={18}/></span><div><p>{label}</p><strong>{count}</strong></div>
+            </section>)}
           </div>
-          <section className="panel records"><h2>مهام GitHub</h2>{!tasks.length && <p className="empty">تظهر المهام هنا عندما يضيف مشرف المستودع التصنيف ai-fix أو ai-security-review.</p>}
-            {tasks.map(item => <div className="record" key={item.id}><strong>#{item.issue} {item.title}</strong><span className="chip">{status[item.status] ?? item.status}</span>
-              <button onClick={() => void api<Replay>("replay/" + item.id).then(setReplay).catch(showError)}>Replay</button></div>)}</section>
+          <div className="overview-grid">
+            <section className="panel tasks-panel" id="task-list">
+              <div className="section-heading"><div><h2>مهام GitHub</h2><p>{token ? "أحدث المهام من المستودع المتصل" : "أمثلة توضح حالات المهام داخل المنصة"}</p></div><span className="section-icon"><GitPullRequest size={19}/></span></div>
+              <div className="filters">
+                <label className="task-search"><Search size={16}/><input aria-label="بحث في المهام" placeholder="ابحث بالعنوان أو المستودع…" value={taskSearch} onChange={event => setTaskSearch(event.target.value)}/></label>
+                <select aria-label="تصفية بحسب الحالة" value={taskState} onChange={event => setTaskState(event.target.value)}><option value="">كل الحالات</option>{Object.entries(status).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+              </div>
+              {filteredTasks.length ? <ul className="task-items">{filteredTasks.map(item => <li className="task-item" key={item.id}>
+                <span className="task-icon"><GitPullRequest size={17}/></span>
+                <div className="task-label"><strong>{item.title}</strong><small dir="ltr">{item.repository} · #{item.issue}</small></div>
+                <span className={"chip task-status state-" + item.status}>{status[item.status] ?? item.status}</span>
+                <button className="task-detail" aria-label={"سجل المهمة " + item.issue} title="عرض سجل المهمة" onClick={() => openReplay(item)}><ChevronLeft size={17}/></button>
+              </li>)}</ul> : <div className="empty"><GitPullRequest size={24}/><p>{visibleTasks.length ? "لا توجد مهام تطابق البحث." : "ستظهر المهام عند إضافة التصنيف ai-fix أو ai-security-review في GitHub."}</p></div>}
+            </section>
+            <section className="panel team-panel">
+              <div className="section-heading"><div><h2>الفريق الهندسي</h2><p>أدوار الوكلاء في سير العمل</p></div><span className="section-icon"><Bot size={20}/></span></div>
+              <ul className="team-items">{team.map(([Icon, name, role]) => <li key={name}><span className="agent-icon"><Icon size={17}/></span><div><strong dir="ltr">{name}</strong><small>{role}</small></div></li>)}</ul>
+            </section>
+          </div>
         </>}
       </div>
     </main>
+    {authOpen && <div className="overlay" onClick={() => setAuthOpen(false)}><form className="dialog panel" onSubmit={unlock} role="dialog" aria-modal="true" aria-labelledby="admin-heading" onClick={event => event.stopPropagation()}>
+      <div className="section-heading"><span className="logo"><LockKeyhole size={22}/></span><button type="button" className="icon-button" aria-label="إغلاق" onClick={() => setAuthOpen(false)}><X size={18}/></button></div>
+      <div><h2 id="admin-heading">دخول الإدارة</h2><p>أدخل رمز الإدارة للوصول إلى بيانات مشروعك.</p></div>
+      {error && <p className="alert" role="alert">{error}</p>}
+      <label htmlFor="admin-token">رمز الإدارة</label>
+      <input id="admin-token" type="password" autoFocus autoComplete="off" value={draft} onChange={event => setDraft(event.target.value)} required/>
+      <button className="primary" disabled={authPending}>{authPending ? "جارٍ الاتصال…" : "اتصال"}</button>
+    </form></div>}
     {palette && <div className="overlay" onClick={() => setPalette(false)}><section className="dialog panel" role="dialog" aria-modal="true" aria-label="لوحة الأوامر" onClick={event => event.stopPropagation()}>
-      <input autoFocus placeholder="ابحث عن صفحة…" value={filter} onChange={event => setFilter(event.target.value)}/>{pages.filter(([path, label]) => (path + label).includes(filter)).map(([path, label, Icon]) =>
+      <input autoFocus aria-label="ابحث عن صفحة" placeholder="ابحث عن صفحة…" value={filter} onChange={event => setFilter(event.target.value)}/>{pages.filter(([path, label]) => (path + label).includes(filter)).map(([path, label, Icon]) =>
         <button key={path} onClick={() => navigate(path)}><Icon size={18}/>{label}</button>)}</section></div>}
     {showToken && <div className="overlay"><form className="dialog panel" onSubmit={connect} role="dialog" aria-modal="true" aria-label="رمز Cloudflare">
       <h2>ربط Cloudflare</h2>{error && <p className="alert">{error}</p>}<input type="password" autoFocus aria-label="API Token" autoComplete="off" value={cloudflareToken} onChange={event => setCloudflareToken(event.target.value)} required/>
