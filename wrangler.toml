@@ -6,27 +6,27 @@ preview_urls = false
 
 [vars]
 AI_GATEWAY_ID = "ai-team-gateway"
-CLOUDFLARE_ACCOUNT_ID = ""
+CLOUDFLARE_ACCOUNT_ID = "d957671c2d5716f3c3c782eb0d1f7e47"
 ALLOWED_REPOSITORY = ""
 GITHUB_APP_INSTALLATION_ID = ""
-DASHBOARD_ORIGIN = "http://localhost:5173"
+DASHBOARD_ORIGIN = "https://autonomous-ai-team.pages.dev"
 FREE_PROVIDERS_VERIFIED = "false"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "ai_engine_d1"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "autonomous-ai-team-db"
+database_id = "37df4188-f058-4dfa-9862-3fd8cd80f1ca"
 
 [[queues.producers]]
 binding = "TASK_QUEUE"
-queue = "ai-fix-queue"
+queue = "autonomous-ai-team-tasks"
 
 [[queues.consumers]]
-queue = "ai-fix-queue"
+queue = "autonomous-ai-team-tasks"
 max_batch_size = 4
 max_batch_timeout = 5
 max_retries = 3
-dead_letter_queue = "ai-fix-dead-letter"
+dead_letter_queue = "autonomous-ai-team-dead-letter"
 
 [[workflows]]
 binding = "FIX"
